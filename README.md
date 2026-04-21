@@ -433,4 +433,4 @@ src/clear_trace/
 
 MIT - see [LICENSE](LICENSE).
 
-Copyright (c) 2026 Joshua
+Copyright (c) 2026 IOTEVERYTHIN

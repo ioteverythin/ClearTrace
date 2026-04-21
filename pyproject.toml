@@ -3,12 +3,12 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "traceops"
-version = "0.5.0"
-description = "TraceOps — record and replay LLM agent traces for deterministic regression testing — framework-agnostic, pytest-native"
+name = "cleartrace"
+version = "0.7.0"
+description = "ClearTrace — record, replay, explain, and improve LLM agent behavior — deterministic testing + black-box explainability in one library"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 authors = [
     { name = "Joshua", email = "joshuanishanth120@gmail.com" },
 ]
@@ -23,6 +23,11 @@ keywords = [
     "vcr",
     "deterministic",
     "ai",
+    "explainability",
+    "xai",
+    "lime",
+    "interpretability",
+    "prompt-engineering",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -30,6 +35,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -47,23 +53,33 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# --- LLM providers ---
 openai = ["openai>=1.0"]
 anthropic = ["anthropic>=0.30"]
 litellm = ["litellm>=1.0"]
+# --- Frameworks ---
 langchain = ["langchain-core>=0.3"]
 langgraph = ["langgraph>=0.2", "langchain-core>=0.3"]
 crewai = ["crewai>=0.30"]
+# --- Record add-ons ---
 rag = []
 ragas = ["ragas>=0.2.0", "langchain-openai>=0.1.0"]
 deepeval = ["deepeval>=1.0.0"]
 mcp = []
 semantic = ["openai>=1.0.0"]
+# --- Vector stores ---
 chromadb = ["chromadb>=0.5.0"]
 pinecone = ["pinecone>=3.0.0"]
 qdrant = ["qdrant-client>=1.9.0"]
 weaviate = ["weaviate-client>=4.0.0"]
 llamaindex = ["llama-index-core>=0.10.0"]
 eval = ["openai>=1.0"]
+# --- Explain engine ---
+explain = ["numpy>=1.24", "pydantic>=2.0", "jinja2>=3.1"]
+advisor = ["numpy>=1.24", "pydantic>=2.0", "jinja2>=3.1"]
+charts = ["matplotlib>=3.7", "numpy>=1.24", "pydantic>=2.0", "jinja2>=3.1"]
+word = ["python-docx>=1.0", "numpy>=1.24", "pydantic>=2.0", "jinja2>=3.1"]
+# --- Everything ---
 all = [
     "openai>=1.0",
     "anthropic>=0.30",
@@ -79,6 +95,11 @@ all = [
     "qdrant-client>=1.9.0",
     "weaviate-client>=4.0.0",
     "llama-index-core>=0.10.0",
+    "numpy>=1.24",
+    "pydantic>=2.0",
+    "jinja2>=3.1",
+    "matplotlib>=3.7",
+    "python-docx>=1.0",
 ]
 dev = [
     "pytest>=8.0",
@@ -89,29 +110,33 @@ dev = [
     "types-PyYAML",
     "openai>=1.0",
     "anthropic>=0.30",
+    "numpy>=1.24",
+    "pydantic>=2.0",
+    "jinja2>=3.1",
 ]
 
 [project.entry-points."pytest11"]
-traceops = "trace_ops.pytest_plugin"
+cleartrace = "clear_trace.pytest_plugin"
 
 [project.scripts]
-traceops = "trace_ops.cli:main"
+cleartrace = "clear_trace.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/ioteverythin/TraceOps"
+Documentation = "https://github.com/ioteverythin/TraceOps/blob/main/ARCHITECTURE.md"
 Repository = "https://github.com/ioteverythin/TraceOps"
 Issues = "https://github.com/ioteverythin/TraceOps/issues"
 Changelog = "https://github.com/ioteverythin/TraceOps/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/trace_ops"]
+packages = ["src/clear_trace"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.coverage.run]
-source = ["trace_ops"]
+source = ["clear_trace"]
 
 [tool.coverage.report]
 show_missing = true
@@ -122,7 +147,7 @@ exclude_lines = [
 ]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py39"
 line-length = 100
 
 [tool.ruff.lint]

@@ -1,0 +1,323 @@
+"""HTML report generator for Prism explanations.
+
+Generates interactive HTML reports with:
+- Color-coded token/sentence importance heatmaps
+- Counterfactual diff views
+- Agent trajectory flow diagrams
+- Concept attribution charts
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Optional
+
+from clear_trace.explain.core.types import Explanation
+
+
+_HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prism Explanation Report</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d1117; color: #c9d1d9; padding: 2rem;
+            max-width: 1200px; margin: 0 auto;
+        }
+        h1 { color: #58a6ff; margin-bottom: 0.5rem; }
+        h2 { color: #79c0ff; margin: 1.5rem 0 0.5rem; border-bottom: 1px solid #21262d; padding-bottom: 0.5rem; }
+        .meta { color: #8b949e; font-size: 0.9rem; margin-bottom: 1.5rem; }
+        .summary {
+            background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+            padding: 1rem; margin-bottom: 1.5rem; white-space: pre-wrap;
+        }
+
+        /* Token heatmap */
+        .heatmap { display: flex; flex-wrap: wrap; gap: 4px; margin: 1rem 0; }
+        .token {
+            padding: 4px 8px; border-radius: 4px; font-family: monospace;
+            font-size: 0.85rem; position: relative; cursor: help;
+        }
+        .token .score { display: none; position: absolute; top: -24px; left: 50%;
+            transform: translateX(-50%); background: #000; padding: 2px 6px;
+            border-radius: 3px; font-size: 0.7rem; white-space: nowrap; }
+        .token:hover .score { display: block; }
+
+        /* Importance levels */
+        .critical { background: rgba(248, 81, 73, 0.4); color: #ff7b72; }
+        .high { background: rgba(248, 81, 73, 0.25); color: #ffa198; }
+        .medium { background: rgba(227, 179, 65, 0.25); color: #e3b341; }
+        .low { background: rgba(139, 148, 158, 0.15); color: #8b949e; }
+        .negligible { background: transparent; color: #484f58; }
+
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+        th { background: #161b22; color: #58a6ff; text-align: left; padding: 8px 12px;
+            border-bottom: 2px solid #30363d; }
+        td { padding: 8px 12px; border-bottom: 1px solid #21262d; }
+        tr:hover { background: rgba(56, 139, 253, 0.05); }
+
+        /* Score bar */
+        .bar-container { width: 120px; height: 16px; background: #21262d;
+            border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; }
+        .bar-fill { height: 100%; border-radius: 3px; }
+        .bar-positive { background: linear-gradient(90deg, #1a7f37, #3fb950); }
+        .bar-negative { background: linear-gradient(90deg, #da3633, #f85149); }
+
+        /* Counterfactual cards */
+        .cf-card {
+            background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+            padding: 1rem; margin: 0.5rem 0;
+        }
+        .cf-card.flip { border-left: 3px solid #f85149; }
+        .cf-card.stable { border-left: 3px solid #3fb950; }
+        .cf-change { color: #ffa657; font-weight: 600; }
+        .cf-metrics { color: #8b949e; font-size: 0.85rem; margin-top: 0.5rem; }
+
+        /* Trajectory */
+        .trajectory { padding: 1rem 0; }
+        .traj-step {
+            display: flex; align-items: flex-start; margin: 0.5rem 0;
+            padding: 0.75rem; background: #161b22; border-radius: 6px;
+            border: 1px solid #30363d;
+        }
+        .traj-step.critical-step { border-left: 3px solid #f0883e; }
+        .traj-num { min-width: 36px; text-align: center; font-weight: bold;
+            color: #58a6ff; padding-top: 2px; }
+        .traj-arrow { color: #484f58; margin: 0 0.5rem; }
+        .traj-tool { font-weight: 600; color: #d2a8ff; }
+        .traj-conf { font-size: 0.8rem; color: #8b949e; margin-left: 0.5rem; }
+        .traj-attrs { font-size: 0.8rem; color: #8b949e; margin-top: 0.25rem; }
+
+        /* Concept chart */
+        .concept-row { display: flex; align-items: center; margin: 0.25rem 0; }
+        .concept-name { min-width: 150px; font-weight: 600; color: #d2a8ff; }
+        .concept-bar { flex: 1; margin: 0 1rem; }
+        .concept-score { min-width: 60px; text-align: right; font-family: monospace; }
+
+        footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #21262d;
+            color: #484f58; font-size: 0.8rem; text-align: center; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Prism Explanation Report</h1>
+    <div class="meta">
+        Method: <strong>{{ method }}</strong> |
+        Model: <strong>{{ model }}</strong> |
+        Generated by Prism v0.1.0
+    </div>
+
+    {% if summary %}
+    <div class="summary">{{ summary }}</div>
+    {% endif %}
+
+    {% if token_importances %}
+    <h2>Token Importance</h2>
+    <div class="heatmap">
+        {% for t in token_importances %}
+        <span class="token {{ t.level }}">{{ t.token }}<span class="score">{{ t.score }}</span></span>
+        {% endfor %}
+    </div>
+    <table>
+        <thead><tr><th>Token</th><th>Score</th><th>Level</th><th>Importance</th></tr></thead>
+        <tbody>
+        {% for t in top_tokens %}
+        <tr>
+            <td><code>{{ t.token }}</code></td>
+            <td>{{ t.score_fmt }}</td>
+            <td>{{ t.level }}</td>
+            <td><div class="bar-container"><div class="bar-fill {{ t.bar_class }}" style="width: {{ t.bar_width }}%"></div></div></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    {% if sentence_importances %}
+    <h2>Sentence Importance</h2>
+    <table>
+        <thead><tr><th>#</th><th>Sentence</th><th>Score</th><th>Importance</th></tr></thead>
+        <tbody>
+        {% for s in sentence_importances %}
+        <tr>
+            <td>{{ s.index }}</td>
+            <td>{{ s.text }}</td>
+            <td>{{ s.score_fmt }}</td>
+            <td><div class="bar-container"><div class="bar-fill {{ s.bar_class }}" style="width: {{ s.bar_width }}%"></div></div></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    {% if counterfactuals %}
+    <h2>Counterfactual Explanations ({{ counterfactuals|length }})</h2>
+    {% for cf in counterfactuals %}
+    <div class="cf-card {{ 'flip' if cf.is_flip else 'stable' }}">
+        <div class="cf-change">{{ cf.change_description }}</div>
+        <div class="cf-metrics">
+            Edit distance: {{ cf.edit_distance }} |
+            Semantic distance: {{ cf.semantic_distance }} |
+            {{ 'OUTPUT FLIPPED' if cf.is_flip else 'Output stable' }}
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if trajectory %}
+    <h2>Agent Trajectory ({{ trajectory.decisions|length }} steps)</h2>
+    <div class="trajectory">
+        {% for d in trajectory.decisions %}
+        <div class="traj-step {{ 'critical-step' if d.is_critical else '' }}">
+            <div class="traj-num">{{ d.step }}</div>
+            <div>
+                <span class="traj-tool">{{ d.tool_name }}</span>
+                <span class="traj-conf">confidence: {{ d.confidence_fmt }}</span>
+                {% if d.is_critical %}<span style="color: #f0883e;"> ⚡ critical</span>{% endif %}
+                {% if d.top_attrs %}
+                <div class="traj-attrs">{{ d.top_attrs }}</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if concept_attributions %}
+    <h2>Concept Attribution</h2>
+    {% for c in concept_attributions %}
+    <div class="concept-row">
+        <span class="concept-name">{{ c.concept }}</span>
+        <div class="concept-bar">
+            <div class="bar-container" style="width: 100%;">
+                <div class="bar-fill {{ c.bar_class }}" style="width: {{ c.bar_width }}%"></div>
+            </div>
+        </div>
+        <span class="concept-score">{{ c.score_fmt }}</span>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <footer>Generated by Prism — Explainability for LLM Agents</footer>
+</body>
+</html>"""
+
+
+class HTMLReport:
+    """Generate an interactive HTML report from a Prism explanation.
+
+    Example:
+        >>> report = HTMLReport(explanation)
+        >>> report.save("explanation_report.html")
+        >>> html_str = report.render()
+    """
+
+    def __init__(self, explanation: Explanation):
+        self.explanation = explanation
+
+    def render(self) -> str:
+        """Render the explanation as an HTML string."""
+        try:
+            from jinja2 import Template
+        except ImportError:
+            return self._render_simple()
+
+        template = Template(_HTML_TEMPLATE)
+        exp = self.explanation
+
+        # Prepare template data
+        token_data = []
+        for t in exp.token_importances:
+            token_data.append({
+                "token": t.token,
+                "score": f"{t.score:+.3f}",
+                "level": t.level.value,
+            })
+
+        top_token_data = []
+        for t in exp.top_tokens(15):
+            top_token_data.append({
+                "token": t.token,
+                "score_fmt": f"{t.score:+.3f}",
+                "level": t.level.value,
+                "bar_class": "bar-positive" if t.score >= 0 else "bar-negative",
+                "bar_width": min(abs(t.score) * 100, 100),
+            })
+
+        sentence_data = []
+        for s in sorted(exp.sentence_importances, key=lambda x: abs(x.score), reverse=True):
+            sentence_data.append({
+                "index": s.index,
+                "text": s.text[:120],
+                "score_fmt": f"{s.score:+.3f}",
+                "bar_class": "bar-positive" if s.score >= 0 else "bar-negative",
+                "bar_width": min(abs(s.score) * 100, 100),
+            })
+
+        cf_data = []
+        for cf in exp.counterfactuals[:10]:
+            cf_data.append({
+                "change_description": cf.change_description,
+                "edit_distance": cf.edit_distance,
+                "semantic_distance": f"{cf.semantic_distance:.3f}",
+                "is_flip": cf.is_flip,
+            })
+
+        traj_data = None
+        if exp.trajectory and exp.trajectory.decisions:
+            traj_decisions = []
+            for d in exp.trajectory.decisions:
+                top_attrs = sorted(
+                    d.attribution_scores.items(), key=lambda x: x[1], reverse=True
+                )[:3]
+                attrs_str = ", ".join(f"{k}={v:.2f}" for k, v in top_attrs)
+                traj_decisions.append({
+                    "step": d.step,
+                    "tool_name": d.tool_name,
+                    "confidence_fmt": f"{d.confidence:.2f}",
+                    "is_critical": d.step in exp.trajectory.critical_decision_indices,
+                    "top_attrs": attrs_str,
+                })
+            traj_data = {"decisions": traj_decisions}
+
+        concept_data = []
+        for c in exp.concept_attributions:
+            concept_data.append({
+                "concept": c.concept,
+                "score_fmt": f"{c.score:+.3f}",
+                "bar_class": "bar-positive" if c.score >= 0 else "bar-negative",
+                "bar_width": min(abs(c.score) * 100, 100),
+            })
+
+        return template.render(
+            method=exp.method,
+            model=exp.model_name or "N/A",
+            summary=exp.summary,
+            token_importances=token_data,
+            top_tokens=top_token_data,
+            sentence_importances=sentence_data,
+            counterfactuals=cf_data,
+            trajectory=traj_data,
+            concept_attributions=concept_data,
+        )
+
+    def save(self, path: str | Path) -> None:
+        """Save the HTML report to a file."""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(self.render(), encoding="utf-8")
+
+    def _render_simple(self) -> str:
+        """Fallback render without Jinja2."""
+        exp = self.explanation
+        parts = [
+            "<html><body style='font-family:sans-serif;background:#0d1117;color:#c9d1d9;padding:2rem'>",
+            f"<h1>Prism Explanation — {exp.method}</h1>",
+            f"<pre>{exp.summary}</pre>" if exp.summary else "",
+            "</body></html>",
+        ]
+        return "\n".join(parts)

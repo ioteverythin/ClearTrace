@@ -1,4 +1,4 @@
-# ClearTrace v0.7.0 — Architecture
+# ClearTrace v0.7.0 - Architecture
 
 ## The Idea
 
@@ -12,7 +12,7 @@ One library. Two questions. Every LLM agent you build.
          +------ [ IMPROVE ] --------+
 ```
 
-ClearTrace is the only library that answers both — record the behavior,
+ClearTrace is the only library that answers both - record the behavior,
 explain the reasoning, improve the quality, then regression-test the result.
 
 ---
@@ -49,7 +49,7 @@ Think of ClearTrace as an organism with three interconnected systems:
 
 ## The Stack
 
-Not a flowchart. A geological cross-section — each layer builds on the one below it.
+Not a flowchart. A geological cross-section - each layer builds on the one below it.
 
 ```
  ┌─────────────────────────────────────────────────────────────────────────────┐

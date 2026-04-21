@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "cleartrace"
 version = "0.7.0"
-description = "ClearTrace — record, replay, explain, and improve LLM agent behavior — deterministic testing + black-box explainability in one library"
+description = "ClearTrace - record, replay, explain, and improve LLM agent behavior - deterministic testing + black-box explainability in one library"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"
